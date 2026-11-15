@@ -2,7 +2,7 @@
 
 from pkgutil import iter_modules
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files
 
 import ltctplugin
 
@@ -13,9 +13,15 @@ hiddenimports = [
 ]
 
 # commands are loaded by name at run time, so PyInstaller does not see them
-hiddenimports += collect_submodules("ltchiptool.commands")
-hiddenimports += collect_submodules("ltchiptool.soc")
-hiddenimports += collect_submodules("uf2tool")
+# (some of their folders have no __init__.py, which collect_submodules skips)
+import os
+
+for root in ("ltchiptool/commands", "ltchiptool/soc", "uf2tool"):
+    for path, _, files in os.walk(root):
+        for file in files:
+            if file.endswith(".py"):
+                name = os.path.join(path, file[:-3]).replace(os.sep, ".")
+                hiddenimports.append(name.removesuffix(".__init__"))
 
 datas = []
 

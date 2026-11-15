@@ -1,8 +1,9 @@
 #  Copyright (c) Kuba Szczodrzyński 2022-10-5.
 
 import shlex
+from importlib import import_module
 from logging import WARNING, error, info, warning
-from os.path import basename, dirname, join
+from os.path import basename, dirname, isfile, join
 from pathlib import Path
 from subprocess import PIPE, Popen
 from threading import Thread
@@ -29,6 +30,9 @@ def get_multi_command_class(cmds: Dict[str, str]):
             fn = join(dirname(__file__), "..", "..", cmds[cmd_name])
             mp = cmds[cmd_name].rpartition("/")[0].replace("/", ".")
             mn = basename(fn).rpartition(".")[0]
+            if not isfile(fn):
+                # frozen builds (PyInstaller) have no source files
+                return import_module(f"{mp}.{mn}").cli
             with open(fn) as f:
                 code = compile(f.read(), fn, "exec")
                 ns["__file__"] = fn

@@ -22,6 +22,7 @@ names and their values, with JSON values already parsed.
 
 import json
 import struct
+from dataclasses import dataclass
 from logging import info, warning
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -205,6 +206,35 @@ def parse_product_info(data: bytes) -> Optional[dict]:
     return info_
 
 
+def _standby_config(product: dict, opts: "YamlOptions") -> dict:
+    """xr806.standby and xr806.wlan for a low-power device."""
+    # Standby is decided at run time: the tuya component reads wk, mwk and sm
+    # from the MCU's product info, takes the wake pins from it when they are
+    # not set here, and only lets the module sleep with sm 1 or 2.
+    standby = dict(enabled=True, require_external_sync=True)
+    wk = product.get("wk", [])
+    if len(wk) == 1 and wk[0] in STANDBY_WAKE_GPIOS:
+        standby["wake_pin"] = f"PA{wk[0]}"
+        standby["wake_edge"] = "falling"
+    elif wk:
+        warning(f"MCU wake line wk={wk} cannot wake the XR806")
+    if product and not set(product.get("sm", [])) & {1, 2}:
+        info("The MCU product info allows no standby (sm); it stays off at run time")
+    if opts.wlan == "suspend":
+        wlan = {
+            "_1": "In standby the WLAN is off: the device is offline while it sleeps",
+            "network_suspend": True,
+        }
+    else:
+        wlan = {
+            "_1": "In standby the WLAN stays connected: Home Assistant sees the device",
+            "_2": "online, and every packet to it (HA, web, OTA) wakes the CPU",
+            "dtim": opts.dtim,
+            "stay_connected": True,
+        }
+    return dict(standby=standby, wlan=wlan)
+
+
 def pull_schema(storage: Dict[str, StorageValue]) -> dict:
     """
     Fetch the device's DP schema with upk2esphome. This sends the device's
@@ -228,11 +258,23 @@ def pull_schema(storage: Dict[str, StorageValue]) -> dict:
     return result
 
 
+@dataclass
+class YamlOptions:
+    """Settings for low-power devices that no dump holds."""
+
+    standby: bool = True
+    # "connected": WLAN stays up in standby; "suspend": WLAN off in standby
+    wlan: str = "connected"
+    dtim: int = 3
+    mcu_wake_pin: bool = True
+
+
 def build_yaml(
     storage: Dict[str, StorageValue],
     schema: Optional[dict],
     low_power: bool = False,
     product: Optional[dict] = None,
+    opts: YamlOptions = YamlOptions(),
 ) -> str:
     """ESPHome YAML for the XR806 port: XR806 header plus upk2esphome entities."""
     try:
@@ -280,38 +322,20 @@ def build_yaml(
     if low_power:
         tuya["protocol"] = "low_power"
         wake = storage.get("wake_up_mcu_io")
-        if isinstance(wake, dict) and (pin := tuya_io_to_pin(wake.get("io", -1))):
+        if not opts.mcu_wake_pin:
+            info("MCU wake pin left to the product info at run time")
+        elif isinstance(wake, dict) and (pin := tuya_io_to_pin(wake.get("io", -1))):
             inverted = wake.get("level", 0) == 0
             tuya["mcu_wake_pin"] = dict(number=pin, inverted=inverted)
         elif len(product.get("mwk", [])) == 1:
             if pin := tuya_io_to_pin(product["mwk"][0]):
                 # the original firmware drives the wake line low by default
                 tuya["mcu_wake_pin"] = dict(number=pin, inverted=True)
-        # Standby is decided at run time: the tuya component reads wk, mwk and sm
-        # from the MCU's product info, takes the wake pins from it when they are
-        # not set here, and only lets the module sleep with sm 1 or 2.
-        standby = dict(enabled=True, require_external_sync=True)
-        wk = product.get("wk", [])
-        if len(wk) == 1 and wk[0] in STANDBY_WAKE_GPIOS:
-            standby["wake_pin"] = f"PA{wk[0]}"
-            standby["wake_edge"] = "falling"
-        elif wk:
-            warning(f"MCU wake line wk={wk} cannot wake the XR806")
-        if product and not set(product.get("sm", [])) & {1, 2}:
-            info(
-                "The MCU product info allows no standby (sm); it stays off at run time"
-            )
-        header["xr806"]["standby"] = standby
-        # Not stored in the dump; this keeps the device reachable during standby.
-        header["xr806"]["wlan"] = {
-            "_1": "In standby the WLAN stays connected: Home Assistant sees the device",
-            "_2": "online, and every packet to it (HA, web, OTA) wakes the CPU",
-            "dtim": 3,
-            "stay_connected": True,
-        }
-        if isinstance(data.get("wifi"), dict):
-            # stay_connected needs a Wi-Fi power save mode
-            data["wifi"]["power_save_mode"] = "light"
+        if opts.standby:
+            header["xr806"].update(_standby_config(product, opts))
+            if opts.wlan == "connected" and isinstance(data.get("wifi"), dict):
+                # stay_connected needs a Wi-Fi power save mode
+                data["wifi"]["power_save_mode"] = "light"
     ordered = dict(header)
     ordered.update(data)
     ordered["uart"] = uart
@@ -377,7 +401,42 @@ def build_yaml(
     help="MCU product info (optional) as logged by the tuya component, e.g. "
     '\'{"p":"...","v":"1.0.0","wk":20,"mwk":28,"sm":1}\'',
 )
-def cli(dump, output, schema_out, schema_file, yaml_out, mcu_dump, product_info):
+@click.option(
+    "--standby/--no-standby",
+    default=True,
+    help="Low-power devices: set up XR806 standby (default: on)",
+)
+@click.option(
+    "--wlan",
+    type=click.Choice(["connected", "suspend"]),
+    default="connected",
+    help="WLAN in standby: stay connected, or switch off (default: connected)",
+)
+@click.option(
+    "--dtim",
+    type=click.IntRange(1, 30),
+    default=3,
+    help="DTIM period while connected in standby (default: 3)",
+)
+@click.option(
+    "--mcu-wake-pin/--no-mcu-wake-pin",
+    default=True,
+    help="Write the MCU wake pin from the dump; without it, it is learned "
+    "from the MCU's product info at run time (default: on)",
+)
+def cli(
+    dump,
+    output,
+    schema_out,
+    schema_file,
+    yaml_out,
+    mcu_dump,
+    product_info,
+    standby,
+    wlan,
+    dtim,
+    mcu_wake_pin,
+):
     flash = dump.read()
     storage = read_tuya_storage(flash)
     if storage is None:
@@ -425,7 +484,10 @@ def cli(dump, output, schema_out, schema_file, yaml_out, mcu_dump, product_info)
         )
 
     if yaml_out:
-        yaml_out.write(build_yaml(storage, schema, bool(reasons), product))
+        opts = YamlOptions(
+            standby=standby, wlan=wlan, dtim=dtim, mcu_wake_pin=mcu_wake_pin
+        )
+        yaml_out.write(build_yaml(storage, schema, bool(reasons), product, opts))
         info(f"Wrote {yaml_out.name}")
 
 

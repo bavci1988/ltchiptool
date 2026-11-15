@@ -11,6 +11,7 @@ COMMANDS = {
     "ambz2tool": "ltchiptool/soc/ambz2/util/ambz2tool.py",
     "ln882htool": "ltchiptool/soc/ln882h/util/ln882htool.py",
     "xr806tool": "ltchiptool/soc/xr806/util/xr806tool.py",
+    "xr806kv": "ltchiptool/soc/xr806/util/tuyakv.py",
 }
 
 

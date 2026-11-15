@@ -2,7 +2,7 @@
 
 from pkgutil import iter_modules
 
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, copy_metadata
 
 import ltctplugin
 
@@ -16,6 +16,13 @@ datas = []
 
 for module in hiddenimports:
     datas += collect_data_files(module)
+
+# packages that read their own version at import time (inquirer, used by upk2esphome)
+for package in ("readchar", "inquirer"):
+    try:
+        datas += copy_metadata(package)
+    except Exception:
+        pass
 
 # commands are loaded by name at run time, so PyInstaller does not see them
 # (some of their folders have no __init__.py, which collect_submodules skips)

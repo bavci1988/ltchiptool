@@ -166,6 +166,45 @@ def tuya_io_to_pin(io: int) -> Optional[str]:
     return None
 
 
+# Tuya's low-power TuyaMCU firmware for the XR806 carries this build name
+LOW_POWER_FIRMWARE = b"xr806_lowpower_common_ty"
+# XR806 GPIOs that can wake the chip from standby (see the xr806 component)
+STANDBY_WAKE_GPIOS = (11, 12, 13, 19, 20)
+
+
+def detect_low_power(flash: bytes, storage: Dict[str, StorageValue]) -> List[str]:
+    """Reasons why the module runs Tuya's low-power TuyaMCU firmware."""
+    reasons = []
+    if LOW_POWER_FIRMWARE in flash:
+        reasons.append(f"firmware '{LOW_POWER_FIRMWARE.decode()}'")
+    if isinstance(storage.get("wake_up_mcu_io"), dict):
+        reasons.append("storage entry 'wake_up_mcu_io'")
+    return reasons
+
+
+def parse_product_info(data: bytes) -> Optional[dict]:
+    """
+    Wake and sleep fields of the MCU's product info (CMD01 reply): 'wk' (MCU wakes
+    the module), 'mwk' (module wakes the MCU) and 'sm' (sleep mode). Works on the
+    reply text and on an MCU firmware dump, which can hold several 'sm' variants.
+    """
+    import re
+
+    def numbers(key: bytes) -> List[int]:
+        pattern = rb'"' + key + rb'"\s*:\s*(\d+)'
+        return sorted({int(m) for m in re.findall(pattern, data)})
+
+    info_ = dict(
+        pid=sorted({m.decode() for m in re.findall(rb'"p"\s*:\s*"\W*(\w{8,})', data)}),
+        wk=numbers(b"wk"),
+        mwk=numbers(b"mwk"),
+        sm=numbers(b"sm"),
+    )
+    if not info_["wk"] and not info_["mwk"] and not info_["sm"]:
+        return None
+    return info_
+
+
 def pull_schema(storage: Dict[str, StorageValue]) -> dict:
     """
     Fetch the device's DP schema with upk2esphome. This sends the device's
@@ -189,7 +228,12 @@ def pull_schema(storage: Dict[str, StorageValue]) -> dict:
     return result
 
 
-def build_yaml(storage: Dict[str, StorageValue], schema: Optional[dict]) -> str:
+def build_yaml(
+    storage: Dict[str, StorageValue],
+    schema: Optional[dict],
+    low_power: bool = False,
+    product: Optional[dict] = None,
+) -> str:
     """ESPHome YAML for the XR806 port: XR806 header plus upk2esphome entities."""
     try:
         from upk2esphome import Opts, upk2esphome
@@ -232,11 +276,36 @@ def build_yaml(storage: Dict[str, StorageValue], schema: Optional[dict]) -> str:
     uart["rx_buffer_size"] = 256
     tuya = dict(upk_tuya)
     tuya["uart_id"] = "mcu_uart"
-    wake = storage.get("wake_up_mcu_io")
-    if isinstance(wake, dict) and (pin := tuya_io_to_pin(wake.get("io", -1))):
-        # a module that wakes the MCU before sending is a low-power TuyaMCU device
+    product = product or {}
+    if low_power:
         tuya["protocol"] = "low_power"
-        tuya["mcu_wake_pin"] = dict(number=pin, inverted=wake.get("level", 1) == 0)
+        wake = storage.get("wake_up_mcu_io")
+        if isinstance(wake, dict) and (pin := tuya_io_to_pin(wake.get("io", -1))):
+            inverted = wake.get("level", 0) == 0
+            tuya["mcu_wake_pin"] = dict(number=pin, inverted=inverted)
+        elif len(product.get("mwk", [])) == 1:
+            if pin := tuya_io_to_pin(product["mwk"][0]):
+                # the original firmware drives the wake line low by default
+                tuya["mcu_wake_pin"] = dict(number=pin, inverted=True)
+        # sm=1/2 allow standby; sm=0 (hibernation) only, or unknown: no standby
+        wk = product.get("wk", [])
+        if set(product.get("sm", [])) & {1, 2} and len(wk) == 1:
+            if wk[0] in STANDBY_WAKE_GPIOS:
+                header["xr806"]["standby"] = dict(
+                    enabled=True,
+                    wake_pin=f"PA{wk[0]}",
+                    wake_edge="falling",
+                    require_external_sync=True,
+                )
+            else:
+                warning(f"MCU wake line wk={wk[0]} cannot wake the XR806")
+        elif not product:
+            warning(
+                "Low-power device, but no MCU product info: standby is not set up. "
+                "Pass --mcu-dump or --product-info."
+            )
+        else:
+            info("The MCU allows no standby (sm), standby is not set up")
     ordered = dict(header)
     ordered.update(data)
     ordered["uart"] = uart
@@ -289,8 +358,21 @@ def build_yaml(storage: Dict[str, StorageValue], schema: Optional[dict]) -> str:
     help="Write an ESPHome YAML for the XR806 port",
     type=click.File("w"),
 )
-def cli(dump, output, schema_out, schema_file, yaml_out):
-    storage = read_tuya_storage(dump.read())
+@click.option(
+    "-m",
+    "--mcu-dump",
+    help="MCU firmware dump, for the wake and sleep fields of its product info",
+    type=click.File("rb"),
+)
+@click.option(
+    "-p",
+    "--product-info",
+    help="MCU product info as logged by the tuya component, e.g. "
+    '\'{"p":"...","v":"1.0.0","wk":20,"mwk":28,"sm":1}\'',
+)
+def cli(dump, output, schema_out, schema_file, yaml_out, mcu_dump, product_info):
+    flash = dump.read()
+    storage = read_tuya_storage(flash)
     if storage is None:
         raise click.ClickException("No Tuya storage found in the dump")
     info(f"Found {len(storage)} entries:")
@@ -319,8 +401,24 @@ def cli(dump, output, schema_out, schema_file, yaml_out):
         if not model:
             warning("The schema response has no DP model")
 
+    reasons = detect_low_power(flash, storage)
+    if reasons:
+        info(f"Low-power TuyaMCU device: {', '.join(reasons)}")
+    product = None
+    if mcu_dump:
+        product = parse_product_info(mcu_dump.read())
+    elif product_info:
+        product = parse_product_info(product_info.encode())
+    if (mcu_dump or product_info) and not product:
+        warning("No wk/mwk/sm fields found in the MCU product info")
+    if product:
+        info(
+            f"MCU product info: wk={product['wk']} mwk={product['mwk']} "
+            f"sm={product['sm']}"
+        )
+
     if yaml_out:
-        yaml_out.write(build_yaml(storage, schema))
+        yaml_out.write(build_yaml(storage, schema, bool(reasons), product))
         info(f"Wrote {yaml_out.name}")
 
 

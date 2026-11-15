@@ -287,25 +287,21 @@ def build_yaml(
             if pin := tuya_io_to_pin(product["mwk"][0]):
                 # the original firmware drives the wake line low by default
                 tuya["mcu_wake_pin"] = dict(number=pin, inverted=True)
-        # sm=1/2 allow standby; sm=0 (hibernation) only, or unknown: no standby
+        # Standby is decided at run time: the tuya component reads wk, mwk and sm
+        # from the MCU's product info, takes the wake pins from it when they are
+        # not set here, and only lets the module sleep with sm 1 or 2.
+        standby = dict(enabled=True, require_external_sync=True)
         wk = product.get("wk", [])
-        if set(product.get("sm", [])) & {1, 2} and len(wk) == 1:
-            if wk[0] in STANDBY_WAKE_GPIOS:
-                header["xr806"]["standby"] = dict(
-                    enabled=True,
-                    wake_pin=f"PA{wk[0]}",
-                    wake_edge="falling",
-                    require_external_sync=True,
-                )
-            else:
-                warning(f"MCU wake line wk={wk[0]} cannot wake the XR806")
-        elif not product:
-            warning(
-                "Low-power device, but no MCU product info: standby is not set up. "
-                "Pass --mcu-dump or --product-info."
+        if len(wk) == 1 and wk[0] in STANDBY_WAKE_GPIOS:
+            standby["wake_pin"] = f"PA{wk[0]}"
+            standby["wake_edge"] = "falling"
+        elif wk:
+            warning(f"MCU wake line wk={wk} cannot wake the XR806")
+        if product and not set(product.get("sm", [])) & {1, 2}:
+            info(
+                "The MCU product info allows no standby (sm); it stays off at run time"
             )
-        else:
-            info("The MCU allows no standby (sm), standby is not set up")
+        header["xr806"]["standby"] = standby
     ordered = dict(header)
     ordered.update(data)
     ordered["uart"] = uart
@@ -361,13 +357,14 @@ def build_yaml(
 @click.option(
     "-m",
     "--mcu-dump",
-    help="MCU firmware dump, for the wake and sleep fields of its product info",
+    help="MCU firmware dump (optional): fixes the wake pins from its product info "
+    "instead of at run time",
     type=click.File("rb"),
 )
 @click.option(
     "-p",
     "--product-info",
-    help="MCU product info as logged by the tuya component, e.g. "
+    help="MCU product info (optional) as logged by the tuya component, e.g. "
     '\'{"p":"...","v":"1.0.0","wk":20,"mwk":28,"sm":1}\'',
 )
 def cli(dump, output, schema_out, schema_file, yaml_out, mcu_dump, product_info):

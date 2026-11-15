@@ -12,6 +12,11 @@ hiddenimports = [
     if name != "ltctplugin.base"
 ]
 
+datas = []
+
+for module in hiddenimports:
+    datas += collect_data_files(module)
+
 # commands are loaded by name at run time, so PyInstaller does not see them
 # (some of their folders have no __init__.py, which collect_submodules skips)
 import os
@@ -20,13 +25,9 @@ for root in ("ltchiptool/commands", "ltchiptool/soc", "uf2tool"):
     for path, _, files in os.walk(root):
         for file in files:
             if file.endswith(".py"):
-                name = os.path.join(path, file[:-3]).replace(os.sep, ".")
+                name = os.path.join(path, file[:-3]).replace("\\", "/").replace("/", ".")
                 hiddenimports.append(name.removesuffix(".__init__"))
 
-datas = []
-
-for module in hiddenimports:
-    datas += collect_data_files(module)
 
 a = Analysis(
     ["cli.py"],

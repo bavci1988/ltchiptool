@@ -302,6 +302,16 @@ def build_yaml(
                 "The MCU product info allows no standby (sm); it stays off at run time"
             )
         header["xr806"]["standby"] = standby
+        # Not stored in the dump; this keeps the device reachable during standby.
+        header["xr806"]["wlan"] = {
+            "_1": "In standby the WLAN stays connected: Home Assistant sees the device",
+            "_2": "online, and every packet to it (HA, web, OTA) wakes the CPU",
+            "dtim": 3,
+            "stay_connected": True,
+        }
+        if isinstance(data.get("wifi"), dict):
+            # stay_connected needs a Wi-Fi power save mode
+            data["wifi"]["power_save_mode"] = "light"
     ordered = dict(header)
     ordered.update(data)
     ordered["uart"] = uart

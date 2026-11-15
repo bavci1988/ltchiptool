@@ -158,19 +158,8 @@ def read_tuya_storage(flash: bytes) -> Optional[Dict[str, StorageValue]]:
     return {name: value for name, (_, value) in sorted(entries.items())}
 
 
-def tuya_io_to_pin(io: int) -> Optional[str]:
-    """Tuya GPIO number to XR806 pin name (PA0..PA23 are 0..23, PB0.. follow)."""
-    if 0 <= io < 24:
-        return f"PA{io}"
-    if 24 <= io < 24 + 16:
-        return f"PB{io - 24}"
-    return None
-
-
 # Tuya's low-power TuyaMCU firmware for the XR806 carries this build name
 LOW_POWER_FIRMWARE = b"xr806_lowpower_common_ty"
-# XR806 GPIOs that can wake the chip from standby (see the xr806 component)
-STANDBY_WAKE_GPIOS = (11, 12, 13, 19, 20)
 
 
 def detect_low_power(flash: bytes, storage: Dict[str, StorageValue]) -> List[str]:
@@ -204,35 +193,6 @@ def parse_product_info(data: bytes) -> Optional[dict]:
     if not info_["wk"] and not info_["mwk"] and not info_["sm"]:
         return None
     return info_
-
-
-def _standby_config(product: dict, opts: "YamlOptions") -> dict:
-    """xr806.standby and xr806.wlan for a low-power device."""
-    # Standby is decided at run time: the tuya component reads wk, mwk and sm
-    # from the MCU's product info, takes the wake pins from it when they are
-    # not set here, and only lets the module sleep with sm 1 or 2.
-    standby = dict(enabled=True, require_external_sync=True)
-    wk = product.get("wk", [])
-    if len(wk) == 1 and wk[0] in STANDBY_WAKE_GPIOS:
-        standby["wake_pin"] = f"PA{wk[0]}"
-        standby["wake_edge"] = "falling"
-    elif wk:
-        warning(f"MCU wake line wk={wk} cannot wake the XR806")
-    if product and not set(product.get("sm", [])) & {1, 2}:
-        info("The MCU product info allows no standby (sm); it stays off at run time")
-    if opts.wlan == "suspend":
-        wlan = {
-            "_1": "In standby the WLAN is off: the device is offline while it sleeps",
-            "network_suspend": True,
-        }
-    else:
-        wlan = {
-            "_1": "In standby the WLAN stays connected: Home Assistant sees the device",
-            "_2": "online, and every packet to it (HA, web, OTA) wakes the CPU",
-            "dtim": opts.dtim,
-            "stay_connected": True,
-        }
-    return dict(standby=standby, wlan=wlan)
 
 
 def pull_schema(storage: Dict[str, StorageValue]) -> dict:
@@ -272,16 +232,20 @@ class YamlOptions:
 def build_yaml(
     storage: Dict[str, StorageValue],
     schema: Optional[dict],
-    low_power: bool = False,
+    low_power: List[str],
     product: Optional[dict] = None,
     opts: YamlOptions = YamlOptions(),
 ) -> str:
-    """ESPHome YAML for the XR806 port: XR806 header plus upk2esphome entities."""
+    """ESPHome YAML for the XR806 port, made by upk2esphome (with XR806 support)."""
     try:
         from upk2esphome import Opts, upk2esphome
-        from upk2esphome.result import YamlResult
     except ImportError:
         raise click.ClickException("Install upk2esphome: pip install upk2esphome")
+    if "xr806_standby" not in Opts.FLAGS:
+        raise click.ClickException(
+            "This upk2esphome has no XR806 support; install it from "
+            "https://github.com/bavci1988/upk2esphome (branch xr806)"
+        )
 
     extras = {}
     if schema:
@@ -289,72 +253,22 @@ def build_yaml(
         category = schema.get("detailsResponse", {}).get("category", None)
         if model:
             extras = dict(model=model, category=category)
-    result = upk2esphome(storage, Opts(), extras)
+    data = dict(storage)
+    data["xr806"] = dict(low_power=low_power, product=product or {})
+    upk_opts = Opts(
+        xr806_standby=opts.standby,
+        xr806_wlan_connected=opts.wlan == "connected",
+        xr806_mcu_wake_pin=opts.mcu_wake_pin,
+        xr806_dtim=str(opts.dtim),
+    )
+    result = upk2esphome(data, upk_opts, extras)
     if result.errors:
         raise click.ClickException("\n".join(result.errors))
+    for text in result.logs:
+        info(text)
     for text in result.warnings:
         warning(text)
-
-    data = dict(result.data)
-    upk_tuya = data.get("tuya") or {}
-    for key in ("bk72xx", "rtl87xx", "ln882x", "libretiny", "uart", "tuya"):
-        data.pop(key, None)
-    data["text_sensor"] = [
-        item
-        for item in data.get("text_sensor", [])
-        if item.get("platform") != "libretiny"
-    ]
-    if not data["text_sensor"]:
-        data.pop("text_sensor")
-
-    # current ESPHome removed the API password; use encryption instead
-    data["api"] = dict(encryption=dict(key="!secret api_encryption_key"))
-    if isinstance(data.get("ota"), dict) and not data["ota"].get("password"):
-        data["ota"].pop("password", None)
-    header = dict(esphome=dict(name="xr806-tuya"), xr806=dict(board="wxu"))
-    data.pop("esphome", None)
-    baud = (storage.get("baud_cfg") or {}).get("baud", 115200)
-    uart = dict(id="mcu_uart", tx_pin="PB0", rx_pin="PB1", baud_rate=baud)
-    uart["rx_buffer_size"] = 256
-    tuya = dict(upk_tuya)
-    tuya["uart_id"] = "mcu_uart"
-    product = product or {}
-    if low_power:
-        tuya["protocol"] = "low_power"
-        wake = storage.get("wake_up_mcu_io")
-        if not opts.mcu_wake_pin:
-            info("MCU wake pin left to the product info at run time")
-        elif isinstance(wake, dict) and (pin := tuya_io_to_pin(wake.get("io", -1))):
-            inverted = wake.get("level", 0) == 0
-            tuya["mcu_wake_pin"] = dict(number=pin, inverted=inverted)
-        elif len(product.get("mwk", [])) == 1:
-            if pin := tuya_io_to_pin(product["mwk"][0]):
-                # the original firmware drives the wake line low by default
-                tuya["mcu_wake_pin"] = dict(number=pin, inverted=True)
-        if opts.standby:
-            header["xr806"].update(_standby_config(product, opts))
-            if opts.wlan == "connected" and isinstance(data.get("wifi"), dict):
-                # stay_connected needs a Wi-Fi power save mode
-                data["wifi"]["power_save_mode"] = "light"
-    ordered = dict(header)
-    ordered.update(data)
-    ordered["uart"] = uart
-    ordered["tuya"] = tuya
-    for key in list(data):
-        if key not in (
-            "logger",
-            "api",
-            "ota",
-            "wifi",
-            "web_server",
-            "captive_portal",
-            "mdns",
-        ):
-            ordered[key] = ordered.pop(key)
-
-    out = YamlResult()
-    out.data = ordered
-    return out.text
+    return result.text
 
 
 @click.command(
@@ -487,7 +401,7 @@ def cli(
         opts = YamlOptions(
             standby=standby, wlan=wlan, dtim=dtim, mcu_wake_pin=mcu_wake_pin
         )
-        yaml_out.write(build_yaml(storage, schema, bool(reasons), product, opts))
+        yaml_out.write(build_yaml(storage, schema, reasons, product, opts))
         info(f"Wrote {yaml_out.name}")
 
 

@@ -26,7 +26,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip || exit /b
           python -m pip install .[gui] || exit /b
-          python -m pip install "ltchiptool-terminal>=1.4.0" "upk2esphome>=1.15.0" pyinstaller || exit /b
+          python -m pip install "ltchiptool-terminal>=1.4.0" "upk2esphome @ git+https://github.com/bavci1988/upk2esphome@xr806" pyinstaller || exit /b
           python -m pip check || exit /b
 
       - name: Copy LT data snapshot
@@ -52,6 +52,7 @@ jobs:
           dist\ltchiptool-cli.exe list families || exit /b
           dist\ltchiptool-cli.exe soc xr806kv --help || exit /b
           dist\ltchiptool-cli.exe soc xr806tool --help || exit /b
+          dist\ltchiptool-cli.exe plugin upk2esphome firmware --help | findstr /C:"--xr806-standby" || exit /b
 
       - name: Upload EXE files
         uses: actions/upload-artifact@v4

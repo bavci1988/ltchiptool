@@ -1,0 +1,20 @@
+{
+	"build": {
+		"bkota": {
+			"format": "diff2ya",
+			"flh_len": "0x3B8000"
+		}
+	},
+	"flash": {
+		"download": "0x253000+0x174000",
+		"diff2ya": "0x3C7000+0x1000",
+		"tuya": "0x3DA000+0x8000",
+		"kvs": "0x3E2000+0x8000",
+		"userdata": "0x3EA000+0x12000"
+	},
+	"doc": {
+		"params": {
+			"layout": "**Tuya default** for T3 (OTA 0x253000, RF 0x3FE000)"
+		}
+	}
+}

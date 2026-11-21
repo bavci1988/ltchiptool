@@ -1,0 +1,18 @@
+{
+	"_base": [
+		"beken-7236",
+		"beken-7236-tuya",
+		"ic/bk7236-qfn40",
+		"pcb/t3-u"
+	],
+	"build": {
+		"mcu": "bk7236",
+		"variant": "t3-u"
+	},
+	"name": "T3-U Wi-Fi Module",
+	"url": "https://developer.tuya.com/en/docs/iot/T3-U-Module-Datasheet?id=Kdd4pzscwf0il",
+	"vendor": "Tuya Inc.",
+	"pcb": {
+		"symbol": "T3-U"
+	}
+}

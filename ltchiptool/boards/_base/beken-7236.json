@@ -1,0 +1,47 @@
+{
+	"build": {
+		"family": "BK7236",
+		"f_cpu": "120000000L",
+		"prefix": "arm-none-eabi-",
+		"ldscript": "bk7236_bsp.ld"
+	},
+	"flash": {
+		"bootloader": "0x000000+0x11000",
+		"app": "0x011000+0x242000",
+		"download": "0x253000+0x187000",
+		"kvs": "0x3DA000+0x8000",
+		"userdata": "0x3E2000+0x1A000",
+		"calibration": "0x3FE000+0x1000",
+		"net": "0x3FF000+0x1000"
+	},
+	"connectivity": [
+		"wifi",
+		"ble"
+	],
+	"upload": {
+		"maximum_size": 2220512,
+		"maximum_ram_size": 655360,
+		"flash_size": 4194304,
+		"require_upload_port": true,
+		"speed": 921600,
+		"protocol": "uart",
+		"protocols": [
+			"uart"
+		]
+	},
+	"doc": {
+		"params": {
+			"manufacturer": "Beken",
+			"series": "BK72XX",
+			"voltage": "3.0V - 3.6V",
+			"extra": {
+				"Wi-Fi": "802.11 b/g/n/ax",
+				"Bluetooth": "BLE v5.2"
+			},
+			"layout": "**SDK default** (bk_idk v2.2.1, OTA 0x253000, RF 0x3FE000)"
+		},
+		"extra": [
+			"Bootloader and app partitions contain CRC16 sums every 32 bytes. Offsets and sizes are physical flash addresses including the CRC bytes."
+		]
+	}
+}

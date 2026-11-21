@@ -29,11 +29,12 @@ jobs:
         run: |
           pip install "ltchiptool-terminal>=1.4.0" "upk2esphome>=1.15.0"
 
-      - name: Keep the local ltchiptool
+      - name: Keep the local ltchiptool, bk7231tools with BK7236
         shell: cmd
         run: |
           pip install --no-deps --force-reinstall . || exit /b
-          pip show ltchiptool
+          pip install --no-deps --force-reinstall "bk7231tools @ git+https://github.com/bavci1988/bk7231tools@claude/festive-bardeen-ds5hrm" || exit /b
+          pip show ltchiptool bk7231tools
 
       # The LibreTiny data snapshot (ltchiptool/platform.json, families.json, boards/)
       # is committed on this branch, so no LibreTiny checkout is needed.

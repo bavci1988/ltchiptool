@@ -44,6 +44,11 @@ BK72XX_GUIDE = [
 
 SCTRL_EFUSE_CTRL = 0x00800074
 SCTRL_EFUSE_OPTR = 0x00800078
+# BK7236: eFuse block and the clock enable register of the system controller
+BK7236_EFUSE_CTRL = 0x44880010
+BK7236_EFUSE_OPTR = 0x44880014
+BK7236_SYS_CLK_EN = 0x44010030
+BK7236_SYS_CLK_EN_EFUSE = 1 << 7
 
 
 class BK72XXFlash(SocInterface, ABC):
@@ -173,11 +178,14 @@ class BK72XXFlash(SocInterface, ABC):
                 ("Flash Size (detected)", sizeof(flash_size)),
             ]
 
-        # the eFuse registers are at a different address on BK7236
-        if (
-            self.bk.check_protocol(BkReadRegCmnd)
-            and self.bk.chip_type != BkChipType.BK7236
-        ):
+        is_bk7236 = self.bk.chip_type == BkChipType.BK7236
+        if self.bk.check_protocol(BkReadRegCmnd) and is_bk7236:
+            efuse = gen2bytes(self.flash_read_raw(0, 32, memory=FlashMemoryType.EFUSE))
+            self.info += [
+                ("", ""),
+                ("eFuse", efuse.hex(" ").upper()),
+            ]
+        elif self.bk.check_protocol(BkReadRegCmnd):
             efuse = gen2bytes(self.flash_read_raw(0, 16, memory=FlashMemoryType.EFUSE))
             coeffs = struct.unpack("<IIII", efuse[0:16])
             self.info += [
@@ -203,8 +211,6 @@ class BK72XXFlash(SocInterface, ABC):
                 raise NotImplementedError("Only BK7231N has built-in ROM")
             return 16 * 1024
         if memory == FlashMemoryType.EFUSE:
-            if self.bk.chip_type == BkChipType.BK7236:
-                raise NotImplementedError("Reading eFuse is not supported on BK7236")
             if not self.bk.check_protocol(BkWriteRegCmnd):
                 raise NotImplementedError("Only BK7231N can read eFuse via UART")
             return 32
@@ -229,13 +235,21 @@ class BK72XXFlash(SocInterface, ABC):
                 callback.on_update(4)
             return
         elif memory == FlashMemoryType.EFUSE:
+            efuse_ctrl, efuse_optr = SCTRL_EFUSE_CTRL, SCTRL_EFUSE_OPTR
+            if self.bk.chip_type == BkChipType.BK7236:
+                efuse_ctrl, efuse_optr = BK7236_EFUSE_CTRL, BK7236_EFUSE_OPTR
+                # same register layout, but the eFuse block needs its clock
+                reg = self.bk.register_read(BK7236_SYS_CLK_EN)
+                if not reg & BK7236_SYS_CLK_EN_EFUSE:
+                    reg |= BK7236_SYS_CLK_EN_EFUSE
+                    self.bk.register_write(BK7236_SYS_CLK_EN, reg)
             for addr in range(offset, offset + length):
-                reg = self.bk.register_read(SCTRL_EFUSE_CTRL)
+                reg = self.bk.register_read(efuse_ctrl)
                 reg = (reg & ~0x1F02) | (addr << 8) | 1
-                self.bk.register_write(SCTRL_EFUSE_CTRL, reg)
+                self.bk.register_write(efuse_ctrl, reg)
                 while reg & 1:
-                    reg = self.bk.register_read(SCTRL_EFUSE_CTRL)
-                reg = self.bk.register_read(SCTRL_EFUSE_OPTR)
+                    reg = self.bk.register_read(efuse_ctrl)
+                reg = self.bk.register_read(efuse_optr)
                 if reg & 0x100:
                     yield bytes([reg & 0xFF])
                     callback.on_update(1)

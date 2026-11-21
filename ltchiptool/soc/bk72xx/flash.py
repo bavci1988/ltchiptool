@@ -173,7 +173,11 @@ class BK72XXFlash(SocInterface, ABC):
                 ("Flash Size (detected)", sizeof(flash_size)),
             ]
 
-        if self.bk.check_protocol(BkReadRegCmnd):
+        # the eFuse registers are at a different address on BK7236
+        if (
+            self.bk.check_protocol(BkReadRegCmnd)
+            and self.bk.chip_type != BkChipType.BK7236
+        ):
             efuse = gen2bytes(self.flash_read_raw(0, 16, memory=FlashMemoryType.EFUSE))
             coeffs = struct.unpack("<IIII", efuse[0:16])
             self.info += [
@@ -199,6 +203,8 @@ class BK72XXFlash(SocInterface, ABC):
                 raise NotImplementedError("Only BK7231N has built-in ROM")
             return 16 * 1024
         if memory == FlashMemoryType.EFUSE:
+            if self.bk.chip_type == BkChipType.BK7236:
+                raise NotImplementedError("Reading eFuse is not supported on BK7236")
             if not self.bk.check_protocol(BkWriteRegCmnd):
                 raise NotImplementedError("Only BK7231N can read eFuse via UART")
             return 32

@@ -3,7 +3,8 @@
 		"family": "BK7236",
 		"f_cpu": "120000000L",
 		"prefix": "arm-none-eabi-",
-		"ldscript": "bk7236_bsp.ld"
+		"ldscript": "bk7236_bsp.ld",
+		"bkxip_base": "0x02000000"
 	},
 	"flash": {
 		"bootloader": "0x000000+0x11000",

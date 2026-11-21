@@ -2,7 +2,7 @@ name: Build Win32 GUI (BK7236 test build)
 on:
   workflow_dispatch:
   push:
-    branches: ["build/bk7236-gui"]
+    branches: ["claude/festive-bardeen-ds5hrm"]
 jobs:
   gui-win32:
     name: Build Win32 GUI

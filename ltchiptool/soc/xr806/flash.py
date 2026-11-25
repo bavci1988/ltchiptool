@@ -9,6 +9,7 @@ from ltchiptool.util.flash import FlashConnection, FlashFeatures, FlashMemoryTyp
 from ltchiptool.util.streams import ProgressCallback
 from uf2tool import OTAScheme, UploadContext
 
+from .util import awih
 from .util.xr806tool import XR806_MAX_BAUDRATE, XR806_ROM_BAUDRATE, XR806Tool
 
 XR806_DEFAULT_FLASH_SIZE = 0x200000
@@ -19,16 +20,25 @@ XR806_GUIDE = [
         ("PC", "XR806"),
         ("RX", "TX0 (PB00)"),
         ("TX", "RX0 (PB01)"),
-        ("GND", "PB02 (only while resetting)"),
+        ("", ""),
+        ("GND", "PB02 (BOOT, only while resetting)"),
+        ("GND", "CHIP_PWD (reset, only briefly)"),
         ("", ""),
         ("GND", "GND"),
+        ("3.3V", "VBAT / 3.3V"),
     ],
-    "On Tuya WXU modules, TX0 is pad 15, RX0 is pad 16 and PB02 is pad 17.",
+    "Tuya WXU module: TX0 is pad 15, RX0 is pad 16, PB02 is pad 17,\n"
+    "CHIP_PWD (CEN) is pad 18, GND is pad 13 and 3.3V is pad 14.\n"
+    "Bare XR806 (QFN32): TX0 is pin 29, RX0 is pin 28, PB02 is pin 25\n"
+    "and CHIP_PWD is pin 15.",
+    "On devices with an MCU (e.g. thermostats), UART0 is often also wired to the MCU.\n"
+    "Disconnect the MCU or hold it in reset while flashing.",
     "Using a good, stable 3.3V power supply is crucial. Most flashing issues\n"
     "are caused by either voltage drops during intensive flash operations,\n"
-    "or bad/loose wires.",
-    "To enter download mode, hold PB02 low while the chip is powered on or\n"
-    "reset, while the flashing program is trying to establish communication.\n"
+    "or bad/loose wires. The 3.3V pin of most USB-TTL adapters is too weak.",
+    "To enter download mode, connect PB02 to GND, then power-cycle the chip\n"
+    "or connect CHIP_PWD to GND for a moment, while the flashing program is\n"
+    "trying to establish communication. Remove PB02 from GND afterwards.\n"
     "A running SDK application may also enter download mode by itself when\n"
     "it receives the 'upgrade' command, which is sent first.",
 ]
@@ -77,7 +87,11 @@ class XR806Flash(SocInterface, ABC):
             return
         self.flash_build_protocol()
         assert self.xr806
-        self.xr806.prepare(self.conn.baudrate)
+        try:
+            self.xr806.prepare(self.conn.baudrate)
+        except (ValueError, RuntimeError) as e:
+            # noise from a running application while linking; the caller retries on timeouts
+            raise TimeoutError(f"No valid reply from the boot ROM: {e}")
         self.conn.linked = True
 
     def flash_disconnect(self) -> None:
@@ -100,12 +114,63 @@ class XR806Flash(SocInterface, ABC):
         assert self.xr806
         size = self.xr806.get_flash_size()
         self.info = [
+            ("Chip Type", "XR806"),
             ("BROM Version", str(self.xr806.brom_version)),
-            ("Flash ID", self.xr806.flash_id.hex(" ").upper()),
-            ("Flash Size", f"{size // 1024} KiB" if size else "Unknown"),
             ("Flash Helper", "Loaded" if self.xr806.stub_loaded else "Not used"),
+            ("", ""),
+            ("Flash ID", self.xr806.flash_id.hex(" ").upper()),
+            ("Flash Size (by ID)", f"{size // 1024} KiB" if size else "Unknown"),
+            ("", ""),
+            *self._read_image_info(),
         ]
         return self.info
+
+    def _read_header(self, offset: int, section_id: int) -> Tuple[int, ...]:
+        """AWIH header fields at offset; only the header is read and checked."""
+        data = b"".join(self.xr806.flash_read(offset, awih.HEADER.size))
+        fields = awih.HEADER.unpack(data)
+        if (
+            fields[awih._MAGIC] != awih.AWIH_MAGIC
+            or fields[awih._VERSION] != awih.AWIH_VERSION
+            or awih.checksum16(data) != 0xFFFF
+            or fields[awih._ID] != section_id
+        ):
+            raise ValueError(f"No AWIH section 0x{section_id:08X} at 0x{offset:X}")
+        return fields
+
+    def _read_image_info(self) -> List[Tuple[str, str]]:
+        """Bootloader, application and OTA layout, from the AWIH headers in flash."""
+        try:
+            boot = self._read_header(0, awih.ID_BOOT)
+        except ValueError:
+            return [("Bootloader", "Not found (empty or foreign flash content)")]
+        result = [
+            ("Bootloader", f"{boot[awih._DATA_SIZE]} bytes"),
+        ]
+        app_offset = boot[awih._NEXT]
+        try:
+            app = self._read_header(app_offset, awih.ID_APP)
+            result.append(
+                ("Application", f"0x{app_offset:06X}, {app[awih._DATA_SIZE]} bytes")
+            )
+        except ValueError:
+            result.append(("Application", f"Not found at 0x{app_offset:06X}"))
+        ota_cfg = boot[awih._PRIV1]
+        if ota_cfg == awih.NO_NEXT:
+            result.append(("OTA Layout", "Not set (no OTA possible)"))
+        else:
+            ota_cfg_size = boot[awih._PRIV0] >> 8
+            image_limit = (boot[awih._PRIV2] & 0xFFFF) * 1024
+            slot_size = (boot[awih._PRIV2] >> 16) * 1024
+            result += [
+                ("Application Limit", f"0x{image_limit:06X}"),
+                ("OTA Config (FDCM)", f"0x{ota_cfg:06X}"),
+                (
+                    "OTA Download Slot",
+                    f"0x{ota_cfg + ota_cfg_size:06X}, {slot_size // 1024} KiB",
+                ),
+            ]
+        return result
 
     def flash_get_chip_info_string(self) -> str:
         self.flash_connect()

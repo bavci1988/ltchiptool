@@ -1,0 +1,14 @@
+{
+	"flash": {
+		"userdata": "0x1F0000+0x5000",
+		"tuya": "0x1F5000+0xB000"
+	},
+	"doc": {
+		"params": {
+			"layout": "**Tuya default** for WXU (OTA config 0x13F000, download 0x140000, Tuya data 0x1F5000)"
+		},
+		"extra": [
+			"The Tuya bootloader header sets a 400 KiB download partition at 0x178000; OTA updates need the header of this layout."
+		]
+	}
+}

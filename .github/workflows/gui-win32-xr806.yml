@@ -1,0 +1,50 @@
+name: Build Win32 GUI (XR806 test build)
+on:
+  workflow_dispatch:
+  push:
+    branches: ["claude/quirky-cray-tqb8me"]
+jobs:
+  gui-win32:
+    name: Build Win32 GUI
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install ltchiptool
+        shell: cmd
+        run: |
+          python -m pip install --upgrade pip || exit /b
+          pip install .[gui] || exit /b
+          pip install pyinstaller || exit /b
+
+      - name: Install ltchiptool plugins
+        shell: cmd
+        continue-on-error: true
+        run: |
+          pip install "ltchiptool-terminal>=1.4.0" "upk2esphome>=1.15.0"
+
+      - name: Keep the local ltchiptool
+        shell: cmd
+        run: |
+          pip install --no-deps --force-reinstall . || exit /b
+          pip show ltchiptool
+
+      # The LibreTiny data snapshot with the XR806 family and boards
+      # (ltchiptool/platform.json, families.json, boards/) is committed on this branch.
+      - name: Build GUI with PyInstaller
+        shell: cmd
+        run: |
+          python gui-win32.py || exit /b
+
+      - name: Upload the GUI
+        uses: actions/upload-artifact@v4
+        with:
+          name: ltchiptool-gui-xr806
+          path: dist/*.exe
+          if-no-files-found: error

@@ -1,0 +1,18 @@
+{
+	"_base": [
+		"xradio-xr806",
+		"xradio-xr806-tuya",
+		"ic/xr806-qfn32",
+		"pcb/wxu"
+	],
+	"build": {
+		"mcu": "xr806",
+		"variant": "wxu"
+	},
+	"name": "WXU Wi-Fi Module",
+	"url": "https://developer.tuya.com/en/docs/iot/wxu-module-datasheet?id=Kc2xk9qlk04so",
+	"vendor": "Tuya Inc.",
+	"pcb": {
+		"symbol": "WXU"
+	}
+}

@@ -1,0 +1,176 @@
+{
+	"pcb": {
+		"ic": {
+			"4": {
+				"C_NAME": "PA_11",
+				"GPIO": "PA11",
+				"IRQ": null,
+				"ADC": 1,
+				"SPI": "0_MISO",
+				"WAKE": 1
+			},
+			"5": {
+				"C_NAME": "PA_12",
+				"GPIO": "PA12",
+				"IRQ": null,
+				"ADC": 2,
+				"PWM": 4,
+				"I2C": "0_SCL",
+				"WAKE": 2
+			},
+			"6": {
+				"C_NAME": "PA_13",
+				"GPIO": "PA13",
+				"IRQ": null,
+				"ADC": 3,
+				"PWM": 5,
+				"I2C": "0_SDA",
+				"WAKE": 3
+			},
+			"7": {
+				"C_NAME": "PA_19",
+				"GPIO": "PA19",
+				"IRQ": null,
+				"PWM": 0,
+				"SPI": "0_MOSI",
+				"UART": "2_RTS",
+				"WAKE": 9
+			},
+			"8": {
+				"C_NAME": "PA_20",
+				"GPIO": "PA20",
+				"IRQ": null,
+				"PWM": 1,
+				"SPI": "0_MISO",
+				"UART": "2_CTS",
+				"WAKE": 10
+			},
+			"9": {
+				"C_NAME": "PA_21",
+				"GPIO": "PA21",
+				"IRQ": null,
+				"PWM": 2,
+				"SPI": "0_CS",
+				"UART": "2_RX",
+				"WAKE": 11
+			},
+			"10": {
+				"C_NAME": "PA_22",
+				"GPIO": "PA22",
+				"IRQ": null,
+				"PWM": 3,
+				"SPI": "0_SCK",
+				"UART": "2_TX",
+				"WAKE": 12
+			},
+			"11": {
+				"C_NAME": "PA_23",
+				"GPIO": "PA23",
+				"IRQ": null,
+				"CTRL": "TEST",
+				"WAKE": 13
+			},
+			"15": {
+				"IO": "I",
+				"CTRL": "CEN"
+			},
+			"20": {
+				"C_NAME": "PB_6",
+				"GPIO": "PB06",
+				"GPIONUM": 38,
+				"IRQ": null,
+				"PWM": 2,
+				"SPI": "0_CS",
+				"FLASH": "FCS"
+			},
+			"21": {
+				"C_NAME": "PB_5",
+				"GPIO": "PB05",
+				"GPIONUM": 37,
+				"IRQ": null,
+				"PWM": 1,
+				"SPI": "0_MISO",
+				"UART": "1_CTS",
+				"FLASH": "FD1"
+			},
+			"22": {
+				"C_NAME": "PB_4",
+				"GPIO": "PB04",
+				"GPIONUM": 36,
+				"IRQ": null,
+				"PWM": 0,
+				"SPI": "0_MOSI",
+				"UART": "1_RTS",
+				"FLASH": "FD0"
+			},
+			"23": {
+				"C_NAME": "PB_7",
+				"GPIO": "PB07",
+				"GPIONUM": 39,
+				"IRQ": null,
+				"PWM": 3,
+				"SPI": "0_SCK",
+				"FLASH": "FSCK"
+			},
+			"24": {
+				"C_NAME": "PB_3",
+				"GPIO": "PB03",
+				"GPIONUM": 35,
+				"IRQ": null,
+				"PWM": 7,
+				"UART": "0_RTS",
+				"JTAG": "TDI",
+				"FLASH": "FD3"
+			},
+			"25": {
+				"C_NAME": "PB_2",
+				"GPIO": "PB02",
+				"GPIONUM": 34,
+				"IRQ": null,
+				"PWM": 6,
+				"UART": "0_CTS",
+				"JTAG": "TDO",
+				"FLASH": "FD2",
+				"CTRL": "BOOT"
+			},
+			"26": {
+				"C_NAME": "PB_15",
+				"GPIO": "PB15",
+				"GPIONUM": 47,
+				"IRQ": null,
+				"PWM": 6,
+				"UART": "1_RX",
+				"I2C": "1_SDA"
+			},
+			"27": {
+				"C_NAME": "PB_14",
+				"GPIO": "PB14",
+				"GPIONUM": 46,
+				"IRQ": null,
+				"PWM": 5,
+				"UART": "1_TX",
+				"I2C": "1_SCL"
+			},
+			"28": {
+				"C_NAME": "PB_1",
+				"GPIO": "PB01",
+				"GPIONUM": 33,
+				"IRQ": null,
+				"PWM": 5,
+				"UART": "0_RX",
+				"JTAG": "TCK",
+				"SWD": "CLK"
+			},
+			"29": {
+				"C_NAME": "PB_0",
+				"GPIO": "PB00",
+				"GPIONUM": 32,
+				"IRQ": null,
+				"PWM": 4,
+				"UART": "0_TX",
+				"JTAG": "TMS",
+				"SWD": "DIO"
+			}
+		}
+	}
+}

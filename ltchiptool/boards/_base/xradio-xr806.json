@@ -1,0 +1,63 @@
+{
+	"build": {
+		"family": "XR806",
+		"f_cpu": "160000000L",
+		"prefix": "arm-none-eabi-",
+		"ldscript": "xr806_appos.ld"
+	},
+	"flash": {
+		"boot": "0x000000+0x8000",
+		"app": "0x008000+0x137000",
+		"ota_cfg": "0x13F000+0x1000",
+		"download": "0x140000+0xA0000",
+		"kvs": "0x1E9000+0x6000",
+		"sysinfo": "0x1EF000+0x1000",
+		"userdata": "0x1F0000+0x10000"
+	},
+	"connectivity": [
+		"wifi"
+	],
+	"upload": {
+		"maximum_size": 1273856,
+		"maximum_ram_size": 307200,
+		"flash_size": 2097152,
+		"require_upload_port": true,
+		"speed": 921600,
+		"protocol": "uart",
+		"protocols": [
+			"uart"
+		]
+	},
+	"doc": {
+		"params": {
+			"manufacturer": "XRadio",
+			"series": "XR80X",
+			"voltage": "2.5V - 5.5V",
+			"extra": {
+				"Wi-Fi": "802.11 b/g/n"
+			},
+			"layout": "**SDK default** (compressed OTA: OTA config 0x13F000, download 0x140000)"
+		},
+		"extra": [
+			"The app partition holds the whole AWIH image chain after the bootloader: app, app_xip, wlan_bl, wlan_fw and sys_sdd.",
+			"OTA images are XZ-compressed; the bootloader unpacks the download partition into the app partition."
+		],
+		"flashing": {
+			"links": {
+				"ltchiptool user guide": "../../docs/flashing/tools/ltchiptool.md"
+			},
+			"pins": {
+				"PB01 / RX0": "TX of USB-UART adapter",
+				"PB00 / TX0": "RX of USB-UART adapter",
+				"PB02 (strapping pin)": "GND to enter download mode",
+				"CHIP_PWD": "GND to reset the chip"
+			},
+			"guide": [
+				"Connect the USB-UART adapter.",
+				"Start the flashing process.",
+				"Connect PB02 to GND.",
+				"Power-cycle the device or briefly short CHIP_PWD to GND."
+			]
+		}
+	}
+}

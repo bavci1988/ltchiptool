@@ -30,6 +30,9 @@ a = Analysis(
         ("ltchiptool/gui/ko-fi.png", "."),
         ("ltchiptool/gui/colors.json", "."),
         ("pyproject.toml", "."),
+        # RAM helpers that the flashers load from next to their module
+        ("ltchiptool/soc/ln882h/util/ramcode.bin", "ltchiptool/soc/ln882h/util"),
+        ("ltchiptool/soc/xr806/util/brom_stub.bin", "ltchiptool/soc/xr806/util"),
     ]
     + datas,
     hiddenimports=hiddenimports,

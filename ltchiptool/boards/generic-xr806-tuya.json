@@ -1,0 +1,101 @@
+{
+	"_base": [
+		"generic",
+		"xradio-xr806",
+		"xradio-xr806-tuya",
+		"ic/xr806-qfn32"
+	],
+	"build": {
+		"mcu": "xr806",
+		"variant": "generic-xr806-tuya"
+	},
+	"name": "Generic - XR806 (Tuya)",
+	"symbol": "XR806 (Tuya)",
+	"url": "https://docs.libretiny.eu/boards/generic-xr806-tuya/",
+	"vendor": "Generic",
+	"pcb": {
+		"pinout": {
+			"1": {
+				"IC": 4,
+				"ARD": [
+					"D0",
+					"A0"
+				]
+			},
+			"2": {
+				"IC": 5,
+				"ARD": [
+					"D1",
+					"A1"
+				]
+			},
+			"3": {
+				"IC": 6,
+				"ARD": [
+					"D2",
+					"A2"
+				]
+			},
+			"4": {
+				"IC": 7,
+				"ARD": "D3"
+			},
+			"5": {
+				"IC": 8,
+				"ARD": "D4"
+			},
+			"6": {
+				"IC": 9,
+				"ARD": "D5"
+			},
+			"7": {
+				"IC": 10,
+				"ARD": "D6"
+			},
+			"8": {
+				"IC": 11,
+				"ARD": "D7"
+			},
+			"9": {
+				"IC": 29,
+				"ARD": "D8"
+			},
+			"10": {
+				"IC": 28,
+				"ARD": "D9"
+			},
+			"11": {
+				"IC": 25,
+				"ARD": "D10"
+			},
+			"12": {
+				"IC": 24,
+				"ARD": "D11"
+			},
+			"13": {
+				"IC": 22,
+				"ARD": "D12"
+			},
+			"14": {
+				"IC": 21,
+				"ARD": "D13"
+			},
+			"15": {
+				"IC": 20,
+				"ARD": "D14"
+			},
+			"16": {
+				"IC": 23,
+				"ARD": "D15"
+			},
+			"17": {
+				"IC": 27,
+				"ARD": "D16"
+			},
+			"18": {
+				"IC": 26,
+				"ARD": "D17"
+			}
+		}
+	}
+}

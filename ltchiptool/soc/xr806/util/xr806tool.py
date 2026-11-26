@@ -30,7 +30,6 @@ once for the command frame, and once after the data was sent raw.
 
 import struct
 from logging import debug, info, warning
-from os.path import dirname, join
 from time import sleep, time
 from typing import IO, Callable, Generator, List, Optional, Tuple
 
@@ -44,9 +43,8 @@ XR806_MAX_BAUDRATE = 921600
 XR806_SECTOR_SIZE = 512
 XR806_BLOCK_SIZE = 0x10000
 XR806_WRITE_CHUNK = 0x4000
-XR806_STUB_FILE = "brom_stub.bin"
-XR806_STUB_ADDRESS = 0x10000
-XR806_STUB_ENTRY = 0x10101
+# Boot ROM versions 1 and older need PhoenixMC's proprietary RAM flash helper, which is not included
+XR806_MIN_BROM_VERSION = 2
 
 FRAME_MAGIC = b"BROM"
 FLAG_ERROR = 0x01
@@ -77,6 +75,10 @@ ERRORS = {
 _T_ProgressCB = Optional[Callable[[int], None]]
 
 
+class UnsupportedBootRomError(Exception):
+    """The chip answered, but its boot ROM cannot be used without PhoenixMC's flash helper."""
+
+
 def sum16(data: bytes) -> int:
     """16-bit sum of little-endian words; an odd last byte is added as is."""
     total = sum(struct.unpack_from(f"<{len(data) // 2}H", data))
@@ -102,7 +104,6 @@ def build_frame(cmd: int, args: List[Tuple[str, int]]) -> bytes:
 class XR806Tool(SerialToolBase):
     brom_version: Optional[int] = None
     flash_id: Optional[bytes] = None
-    stub_loaded: bool = False
 
     def __init__(
         self,
@@ -256,25 +257,14 @@ class XR806Tool(SerialToolBase):
     # Flash helpers - public high-level API #
     #########################################
 
-    def load_stub(self, baudrate: int) -> None:
-        """
-        Run the flash helper from PhoenixMC in RAM, like PhoenixMC does
-        for boot ROM version 1 or older. The helper starts at 115200 baud.
-        """
-        with open(join(dirname(__file__), XR806_STUB_FILE), "rb") as f:
-            stub = f.read()
-        self.change_baudrate(min(baudrate, XR806_MAX_BAUDRATE))
-        self.write_memory(XR806_STUB_ADDRESS, stub)
-        self.set_pc(XR806_STUB_ENTRY)
-        self.set_baudrate(XR806_ROM_BAUDRATE)
-        self.sync(timeout=2.0)
-        self.stub_loaded = True
-
-    def prepare(self, baudrate: int, use_stub: bool = True) -> None:
-        """Link, load the flash helper if needed, and switch to 'baudrate'."""
+    def prepare(self, baudrate: int) -> None:
+        """Link, check the boot ROM version, and switch to 'baudrate'."""
         self.link()
-        if use_stub and not self.stub_loaded and (self.brom_version or 0) <= 1:
-            self.load_stub(baudrate)
+        if (self.brom_version or 0) < XR806_MIN_BROM_VERSION:
+            raise UnsupportedBootRomError(
+                f"Boot ROM version {self.brom_version} is not supported "
+                f"(it needs PhoenixMC's flash helper); use PhoenixMC for this chip"
+            )
         self.change_baudrate(baudrate)
 
     def flash_read(
@@ -354,15 +344,10 @@ class XR806Tool(SerialToolBase):
     type=int,
     default=XR806_MAX_BAUDRATE,
 )
-@click.option(
-    "--no-stub",
-    help="Do not load the flash helper into RAM",
-    is_flag=True,
-)
-def cli(device: str, baudrate: int, no_stub: bool):
+def cli(device: str, baudrate: int):
     xr806 = XR806Tool(port=device, baudrate=XR806_ROM_BAUDRATE)
     info("Linking... (hold PB02 low and reset the chip)")
-    xr806.prepare(baudrate, use_stub=not no_stub)
+    xr806.prepare(baudrate)
     info(f"BROM version: {xr806.brom_version}")
     info(f"Flash ID: {xr806.flash_id.hex(' ').upper()}")
     size = xr806.get_flash_size()
@@ -370,8 +355,6 @@ def cli(device: str, baudrate: int, no_stub: bool):
         info(f"Flash size: {size // 1024} KiB")
     else:
         warning("Flash size not recognized")
-    if xr806.stub_loaded:
-        info("Flash helper loaded")
     xr806.change_baudrate(XR806_ROM_BAUDRATE)
     xr806.close()
 

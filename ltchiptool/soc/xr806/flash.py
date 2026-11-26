@@ -116,7 +116,6 @@ class XR806Flash(SocInterface, ABC):
         self.info = [
             ("Chip Type", "XR806"),
             ("BROM Version", str(self.xr806.brom_version)),
-            ("Flash Helper", "Loaded" if self.xr806.stub_loaded else "Not used"),
             ("", ""),
             ("Flash ID", self.xr806.flash_id.hex(" ").upper()),
             ("Flash Size (by ID)", f"{size // 1024} KiB" if size else "Unknown"),
